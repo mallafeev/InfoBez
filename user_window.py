@@ -1,15 +1,20 @@
 from PyQt5.QtWidgets import (
-    QMainWindow, QVBoxLayout, QWidget, QPushButton, QMessageBox, QLineEdit, QInputDialog, QHBoxLayout
+    QMainWindow, QVBoxLayout, QWidget, QPushButton, QMessageBox, QLineEdit, QInputDialog, QHBoxLayout, QMenuBar, QMenu, QAction, QStatusBar
 )
 
 class UserWindow(QMainWindow):
     def __init__(self, um, username, parent_window=None):
+        # === Инициализация окна пользователя ===
         super().__init__()
         self.um = um
         self.username = username
         self.parent_window = parent_window
         self.setWindowTitle(f"Пользователь: {username}")
         self.setGeometry(300, 300, 300, 200)
+
+        self.create_menu()
+
+        self.statusBar().showMessage(f"Пользователь: {username}")
 
         layout = QVBoxLayout()
         central_widget = QWidget()
@@ -20,27 +25,83 @@ class UserWindow(QMainWindow):
         btn_change.clicked.connect(self.change_password)
         layout.addWidget(btn_change)
 
-        btn_save_and_exit = QPushButton("Сохранить и выйти")
-        btn_save_and_exit.clicked.connect(self.save_and_exit)
-        layout.addWidget(btn_save_and_exit)
+        btn_exit_main = QPushButton("Выйти на страницу входа")
+        btn_exit_main.clicked.connect(self.exit_to_main)
+        layout.addWidget(btn_exit_main)
+
+    def create_menu(self):
+        # === Создание меню окна ===
+        menubar = self.menuBar()
+
+        # Меню "Файл"
+        file_menu = menubar.addMenu('Файл')
+
+        exit_action = QAction('Выход из системы', self)
+        exit_action.triggered.connect(self.close)
+        file_menu.addAction(exit_action)
+
+        # Меню "Справка"
+        help_menu = menubar.addMenu('Справка')
+
+        about_action = QAction('О программе', self)
+        about_action.triggered.connect(self.show_about)
+        help_menu.addAction(about_action)
+
+    def show_about(self):
+        # === Отображение информации о программе ===
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.about(self, "О программе", 
+            "Программа разграничения полномочий пользователей\n"
+            "на основе парольной аутентификации c использованием встроенных криптопровайдеров.\n\n"
+            "Автор: Малафеев Леонид Сергеевич. Студент гр. ПИбд-41.\n"
+            "Задание: Вариант 19. Наличие букв и цифр.\n"
+            "Шифрование: DES-CFB\n"
+            "Хеширование: MD4")
 
     def change_password(self):
+        # === Смена пароля пользователя с проверками ===
         from PyQt5.QtWidgets import QLineEdit
-        old_pwd, ok1 = QInputDialog.getText(self, "Старый пароль", "Введите старый пароль:", echo=QLineEdit.Password)
+        old_pwd, ok1 = self.get_text_input("Старый пароль", "Введите старый пароль:", QLineEdit.Password)
+        # Проверка подтверждения ввода старого пароля
         if not ok1:
             return
-        new_pwd, ok2 = QInputDialog.getText(self, "Новый пароль", "Введите новый пароль:", echo=QLineEdit.Password)
+        new_pwd, ok2 = self.get_text_input("Новый пароль", "Введите новый пароль:", QLineEdit.Password)
+        # Проверка подтверждения ввода нового пароля
         if not ok2:
             return
-        confirm_pwd, ok3 = QInputDialog.getText(self, "Подтверждение", "Повторите новый пароль:", echo=QLineEdit.Password)
+        confirm_pwd, ok3 = self.get_text_input("Подтверждение", "Повторите новый пароль:", QLineEdit.Password)
+        # Проверка подтверждения ввода подтверждения
         if not ok3:
             return
 
         success, msg = self.um.change_password(self.username, old_pwd, new_pwd, confirm_pwd)
-        QMessageBox.information(self, "Результат", msg)
+        # Проверка, успешна ли смена пароля
+        if not success:
+            # Если ошибка — предоставляем выбор
+            reply = QMessageBox.question(self, "Ошибка", 
+                                         f"{msg}\n"
+                                         "Повторить ввод?", 
+                                         QMessageBox.Yes | QMessageBox.No)
+            # Русские кнопки
+            yes_button = reply.button(QMessageBox.Yes)
+            if yes_button:
+                yes_button.setText("Да")
+            no_button = reply.button(QMessageBox.No)
+            if no_button:
+                no_button.setText("Нет")
 
-    def save_and_exit(self):
-        pwd, ok = QInputDialog.getText(self, "Шифрование", "Введите пароль для шифрования файла:", echo=QLineEdit.Password)
+            # Проверка подтверждения повторного ввода
+            if reply == QMessageBox.Yes:
+                # Повторить смену пароля
+                self.change_password()
+            return
+        else:
+            QMessageBox.information(self, "Результат", msg)
+
+    def exit_to_main(self):
+        # === Шифрование базы данных и возврат на главное окно ===
+        pwd, ok = self.get_text_input("Шифрование", "Введите пароль для шифрования файла:", QLineEdit.Password)
+        # Проверка подтверждения ввода пароля
         if not ok or not pwd:
             return
 
@@ -54,3 +115,23 @@ class UserWindow(QMainWindow):
         self.close()
         if self.parent_window:
             self.parent_window.show()
+
+    def get_text_input(self, title, label, echo_mode):
+        # === Получение текстового ввода с русскими кнопками ===
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setLabelText(label)
+        dialog.setTextEchoMode(echo_mode)
+
+        # Русские кнопки
+        ok_button = dialog.findChild(QPushButton)
+        if ok_button:
+            ok_button.setText("ОК")
+        cancel_button = dialog.findChild(QPushButton, "cancel")
+        if cancel_button:
+            cancel_button.setText("Отмена")
+
+        if dialog.exec_() == QInputDialog.Accepted:
+            return dialog.textValue(), True
+        else:
+            return "", False
