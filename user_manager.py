@@ -5,26 +5,23 @@ from crypto import decrypt_file, encrypt_file
 from Crypto.Hash import MD4
 
 class UserManager:
-    def __init__(self, enc_file='data/users.db.enc'):
+    def __init__(self, enc_file='data/users.db.enc', password=None):
         os.makedirs(os.path.dirname(enc_file), exist_ok=True)
         self.enc_file = enc_file
         self.db_path = 'data/users.db.tmp'
         self.conn = None
-        self.load_from_encrypted()
+        self.load_from_encrypted(password)
 
-    def load_from_encrypted(self):
+    def load_from_encrypted(self, pwd):
+        print(f"Расшифровываем с паролем: {pwd}")
         if not os.path.exists(self.enc_file):
-            # Создать файл с администратором
+            print("Файл не найден. Создаём новый.")
             self.init_db()
-            # Устанавливаем хеш MD4 от "admin" для пользователя ADMIN
-            h = MD4.new()
-            h.update("admin".encode())
-            admin_hash = h.hexdigest()
-            self.add_user('ADMIN', admin_hash, False, False, 0, 0)
-            self.save_to_encrypted()
+            self.add_user('ADMIN', '', False, False, 0, 0)
+            self.save_to_encrypted(pwd)
             return
 
-        pwd = input("Введите пароль для расшифровки файла: ")
+        print("Файл найден. Расшифровываем.")
         try:
             with open(self.enc_file, 'rb') as f:
                 data = f.read()
@@ -32,9 +29,12 @@ class UserManager:
             with open(self.db_path, 'wb') as f:
                 f.write(decrypted)
             self.conn = sqlite3.connect(self.db_path)
-        except:
-            print("Ошибка расшифровки. Неверный пароль или файл поврежден.")
-            exit()
+            print(f"Соединение с базой: {self.conn}")
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            print(f"Ошибка расшифровки: {e}")
+            QMessageBox.critical(None, "Ошибка", "Ошибка расшифровки. Неверный пароль или файл поврежден.")
+            raise SystemExit
 
     def init_db(self):
         self.conn = sqlite3.connect(self.db_path)
@@ -51,20 +51,12 @@ class UserManager:
         ''')
         self.conn.commit()
 
-    def save_to_encrypted(self):
-        # Сохраняем и шифруем, но НЕ закрываем соединение
+    def save_to_encrypted(self, pwd):
         with open(self.db_path, 'rb') as f:
             data = f.read()
-        pwd = input("Введите пароль для шифрования файла: ")
         encrypted = encrypt_file(data, pwd)
         with open(self.enc_file, 'wb') as f:
             f.write(encrypted)
-    
-    def check_password_policy(self, password):
-        # Проверка, содержит ли пароль хотя бы одну букву и хотя бы одну цифру
-        has_letter = any(c.isalpha() for c in password)
-        has_digit = any(c.isdigit() for c in password)
-        return has_letter and has_digit
 
     def authenticate(self, username, password):
         cursor = self.conn.cursor()
@@ -75,17 +67,26 @@ class UserManager:
         pwd_hash, locked, valid_months = row
         if locked:
             return False, "Аккаунт заблокирован"
-        h = MD4.new()
-        h.update(password.encode())
-        input_hash = h.hexdigest()
-        if pwd_hash != input_hash:
-            return False, "Неверный пароль.  Попробуйте стандартные пароли admin или user"
-        # Проверка срока действия
+
+        if pwd_hash == '':
+            if password == '':
+                return True, "Успешно"
+            else:
+                return False, "Неверный пароль"
+        else:
+            h = MD4.new()
+            h.update(password.encode())
+            input_hash = h.hexdigest()
+            if pwd_hash != input_hash:
+                return False, "Неверный пароль"
         if valid_months > 0:
-            # Если срок действия > 0, считаем, что пароль действителен
-            # (в реальном приложении нужно хранить дату создания пароля)
             pass
         return True, "Успешно"
+
+    def check_password_policy(self, password):
+        has_letter = any(c.isalpha() for c in password)
+        has_digit = any(c.isdigit() for c in password)
+        return has_letter and has_digit
 
     def add_user(self, username, password_hash, locked, password_policy, min_length, valid_months):
         cursor = self.conn.cursor()
@@ -118,17 +119,34 @@ class UserManager:
             self.conn.commit()
 
     def change_password(self, username, old_password, new_password, confirm_password):
-        h = MD4.new()
-        h.update(old_password.encode())
-        old_hash = h.hexdigest()
-
         cursor = self.conn.cursor()
-        cursor.execute("SELECT password_hash FROM Users WHERE username = ?", (username,))
+        cursor.execute("SELECT password_hash, password_policy, min_length FROM Users WHERE username = ?", (username,))
         row = cursor.fetchone()
-        if not row or row[0] != old_hash:
-            return False, "Старый пароль неверен"
+        if not row:
+            return False, "Пользователь не найден"
+
+        pwd_hash, policy_enabled, min_length = row
+
+        if pwd_hash == '':
+            if old_password != '':
+                return False, "Старый пароль неверен"
+        else:
+            h = MD4.new()
+            h.update(old_password.encode())
+            old_hash = h.hexdigest()
+            if pwd_hash != old_hash:
+                return False, "Старый пароль неверен"
+
         if new_password != confirm_password:
             return False, "Пароли не совпадают"
+
+        if policy_enabled:
+            if not self.check_password_policy(new_password):
+                return False, f"Пароль не соответствует требованиям: должен содержать буквы и цифры."
+
+        if len(new_password) < min_length:
+            return False, f"Пароль не соответствует требованиям: минимальная длина — {min_length} символов."
+
         h = MD4.new()
         h.update(new_password.encode())
         new_hash = h.hexdigest()

@@ -4,8 +4,10 @@ from PyQt5.QtWidgets import (
 from user_manager import UserManager
 
 class LoginWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, db_password):
         super().__init__()
+        self.db_password = db_password
+        self.um = UserManager(password=self.db_password)
         self.setWindowTitle("Вход")
         self.setGeometry(300, 300, 300, 150)
 
@@ -27,8 +29,6 @@ class LoginWindow(QMainWindow):
         btn.clicked.connect(self.login)
         layout.addWidget(btn)
 
-        self.um = UserManager()
-
     def login(self):
         username = self.username_input.text()
         password = self.password_input.text()
@@ -41,7 +41,7 @@ class LoginWindow(QMainWindow):
                 self.hide()
             else:
                 from user_window import UserWindow
-                self.user_window = UserWindow(self.um, username)  # Убираем self
+                self.user_window = UserWindow(self.um, username, self)
                 self.user_window.show()
                 self.hide()
         else:
