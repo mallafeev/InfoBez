@@ -1,6 +1,6 @@
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QMenu, QAction, QStatusBar, QPushButton, QVBoxLayout, QWidget, QMessageBox
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMenuBar, QMenu, QAction, QStatusBar, QPushButton, QVBoxLayout, QWidget, QMessageBox, QLineEdit, QInputDialog
 from PyQt5.QtCore import Qt
 from login_window import LoginWindow
 from password_dialog import PasswordDialog
@@ -9,24 +9,30 @@ class MainWindow(QMainWindow):
     def __init__(self, db_password):
         # === Инициализация главного окна приложения ===
         super().__init__()
+        # Храним пароль для расшифровки базы данных
         self.db_password = db_password
+        # Устанавливаем заголовок окна
         self.setWindowTitle("Менеджер пользователей")
+        # Устанавливаем размеры окна
         self.setGeometry(100, 100, 800, 600)
 
+        # Создаём меню
         self.create_menu()
 
+        # Создаём строку состояния
         self.statusBar().showMessage("Готов")
 
+        # Центральный виджет с кнопкой "Войти"
         central_widget = QWidget()
         layout = QVBoxLayout()
         central_widget.setLayout(layout)
 
         # Создаём кнопку, не растягивая на всю ширину
         self.login_button = QPushButton("Войти")
-        self.login_button.setMaximumWidth(200)
+        self.login_button.setMaximumWidth(200)  # Устанавливаем максимальную ширину
         self.login_button.clicked.connect(self.open_login)
         layout.addWidget(self.login_button)
-        layout.setAlignment(Qt.AlignCenter)
+        layout.setAlignment(Qt.AlignCenter)  # Центрируем содержимое layout
 
         self.setCentralWidget(central_widget)
 
@@ -38,7 +44,7 @@ class MainWindow(QMainWindow):
         file_menu = menubar.addMenu('Файл')
 
         exit_action = QAction('Выход из системы', self)
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(self.exit_app)
         file_menu.addAction(exit_action)
 
         # Меню "Справка"
@@ -63,6 +69,21 @@ class MainWindow(QMainWindow):
         self.login_window = LoginWindow(self.db_password, self)
         self.login_window.show()
         self.hide()
+
+    def exit_app(self):
+        # === Завершение работы приложения с шифрованием базы данных ===
+        if hasattr(self, 'login_window') and self.login_window and self.login_window.um:
+            pwd, ok = QInputDialog.getText(self, "Шифрование", "Введите пароль для шифрования файла:", echo=QLineEdit.Password)
+            if not ok or not pwd:
+                return
+            from crypto import encrypt_file
+            with open(self.login_window.um.db_path, 'rb') as f:
+                data = f.read()
+            encrypted = encrypt_file(data, pwd)
+            with open(self.login_window.um.enc_file, 'wb') as f:
+                f.write(encrypted)
+            self.login_window.um.close()
+        self.close()
 
 if __name__ == "__main__":
     # === Запуск приложения ===

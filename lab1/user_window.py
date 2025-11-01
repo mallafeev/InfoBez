@@ -6,14 +6,21 @@ class UserWindow(QMainWindow):
     def __init__(self, um, username, parent_window=None):
         # === Инициализация окна пользователя ===
         super().__init__()
+        # Храним UserManager
         self.um = um
+        # Храним имя пользователя
         self.username = username
+        # Храним ссылку на родительское окно
         self.parent_window = parent_window
+        # Устанавливаем заголовок окна
         self.setWindowTitle(f"Пользователь: {username}")
+        # Устанавливаем размеры окна
         self.setGeometry(300, 300, 300, 200)
 
+        # Создаём меню
         self.create_menu()
 
+        # Создаём строку состояния
         self.statusBar().showMessage(f"Пользователь: {username}")
 
         layout = QVBoxLayout()
@@ -37,7 +44,7 @@ class UserWindow(QMainWindow):
         file_menu = menubar.addMenu('Файл')
 
         exit_action = QAction('Выход из системы', self)
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(self.exit_app)
         file_menu.addAction(exit_action)
 
         # Меню "Справка"
@@ -115,6 +122,21 @@ class UserWindow(QMainWindow):
         self.close()
         if self.parent_window:
             self.parent_window.show()
+
+    def exit_app(self):
+        # === Завершение работы приложения с шифрованием базы данных ===
+        pwd, ok = self.get_text_input("Шифрование", "Введите пароль для шифрования файла:", QLineEdit.Password)
+        # Проверка подтверждения ввода пароля
+        if not ok or not pwd:
+            return
+        from crypto import encrypt_file
+        with open(self.um.db_path, 'rb') as f:
+            data = f.read()
+        encrypted = encrypt_file(data, pwd)
+        with open(self.um.enc_file, 'wb') as f:
+            f.write(encrypted)
+        self.um.close()
+        self.close()
 
     def get_text_input(self, title, label, echo_mode):
         # === Получение текстового ввода с русскими кнопками ===

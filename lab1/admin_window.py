@@ -6,15 +6,21 @@ class AdminWindow(QMainWindow):
     def __init__(self, um, parent_window):
         # === Инициализация окна администратора ===
         super().__init__()
+        # Храним UserManager
         self.um = um
+        # Храним ссылку на родительское окно
         self.parent_window = parent_window
+        # Устанавливаем заголовок окна
         self.setWindowTitle("Панель администратора")
+        # Устанавливаем размеры окна
         self.setGeometry(300, 300, 900, 500)
 
+        # Создаём меню
         self.create_menu()
 
+        # Создаём строку состояния
         self.statusBar().showMessage("Режим администратора")
-        # Создаём элементы окна
+
         layout = QVBoxLayout()
         central_widget = QWidget()
         central_widget.setLayout(layout)
@@ -56,6 +62,7 @@ class AdminWindow(QMainWindow):
 
         layout.addLayout(btn_layout)
 
+        # Кнопка "Выйти в главное меню"
         btn_exit_main = QPushButton("Выйти на страницу входа")
         btn_exit_main.clicked.connect(self.exit_to_main)
         layout.addWidget(btn_exit_main)
@@ -67,15 +74,13 @@ class AdminWindow(QMainWindow):
         # Меню "Файл"
         file_menu = menubar.addMenu('Файл')
 
-        # Добавление действия "Выход из системы"
         exit_action = QAction('Выход из системы', self)
-        exit_action.triggered.connect(self.close)
+        exit_action.triggered.connect(self.exit_app)
         file_menu.addAction(exit_action)
 
         # Меню "Справка"
         help_menu = menubar.addMenu('Справка')
 
-        # Добавление действия "О программе"
         about_action = QAction('О программе', self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
@@ -340,3 +345,18 @@ class AdminWindow(QMainWindow):
 
         self.close()
         self.parent_window.show()
+
+    def exit_app(self):
+        # === Завершение работы приложения с шифрованием базы данных ===
+        pwd, ok = QInputDialog.getText(self, "Шифрование", "Введите пароль для шифрования файла:", echo=QLineEdit.Password)
+        # Проверка подтверждения ввода пароля
+        if not ok or not pwd:
+            return
+        from crypto import encrypt_file
+        with open(self.um.db_path, 'rb') as f:
+            data = f.read()
+        encrypted = encrypt_file(data, pwd)
+        with open(self.um.enc_file, 'wb') as f:
+            f.write(encrypted)
+        self.um.close()
+        self.close()
